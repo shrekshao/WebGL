@@ -27,23 +27,35 @@ var ext = null;
         return;
     }
 
+    let shouldBlend = testExtFloatBlendFunctionality();
+    debug( shouldBlend ?
+        "This device has float 32 blending functionality even if EXT_float_blend is not listed" :
+        "This device cannot do float 32 blending"
+        );
+    const hasExtFloatBlend = gl.getSupportedExtensions().indexOf('EXT_float_blend') != -1;
+    debug( hasExtFloatBlend ?
+        "This device has EXT_float_blend listed" :
+        "This device doesn't have EXT_float_blend listed"
+        );
+    shouldBlend = shouldBlend || hasExtFloatBlend;
+
     debug("");
     debug("Testing float32 blending without EXT_float_blend");
-    testExtFloatBlend(gl.RGBA32F);
-    testExtFloatBlendMRT();
-    testExtFloatBlendNonFloat32Type();
+    testExtFloatBlend(gl.RGBA32F, shouldBlend);
+    testExtFloatBlendMRT(shouldBlend);
+    testExtFloatBlendNonFloat32Type(shouldBlend);
 
     const floatBlend = gl.getExtension("EXT_float_blend");
-    if (!floatBlend) {
+    if (!floatBlend && !shouldBlend) {
         testPassed("EXT_float_blend is allowed to be missing.");
         return;
     }
 
     debug("");
     debug("Testing that float32 blending is allowed with EXT_float_blend");
-    testExtFloatBlend(gl.RGBA32F);
-    testExtFloatBlendMRT();
-    testExtFloatBlendNonFloat32Type();
+    testExtFloatBlend(gl.RGBA32F, shouldBlend);
+    testExtFloatBlendMRT(shouldBlend);
+    testExtFloatBlendNonFloat32Type(shouldBlend);
 })();
 
 debug("");

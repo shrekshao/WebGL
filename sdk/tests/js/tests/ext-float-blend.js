@@ -29,9 +29,51 @@ void main()
 }
 `;
 
-function testExtFloatBlend(internalFormat) {
-    const shouldBlend = gl.getSupportedExtensions().indexOf('EXT_float_blend') != -1;
+function testExtFloatBlendFunctionality() {
+    // test by doing real float32 blending
+    // as some devices don't advertise EXT_float_blend
+    // but could actually do the work correctly.
+    // we try not to break apps that used to work
+    
+    var prog = wtu.setupColorQuad(gl);
+    gl.useProgram(prog);
+    var colorLocation = gl.getUniformLocation(prog, 'u_color');
+    gl.uniform4fv(colorLocation, [0.0, 1.0, 0.0, 0.5]);
 
+    const fb = gl.createFramebuffer();
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, null);
+
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+
+    gl.clearColor(1.0, 0.0, 0.0, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    wtu.drawUnitQuad(gl);
+    gl.getError();  // clear potential errors
+
+    gl.disable(gl.BLEND);
+
+    const buf = new Float32Array(4);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, buf);
+    console.log(buf);
+
+    gl.deleteFramebuffer(fb);
+    gl.deleteTexture(tex);
+
+    return buf[0] == 0.5 &&
+    buf[1] == 0.5 &&
+    buf[2] == 0.0 &&
+    buf[3] == 0.75;
+}
+
+function testExtFloatBlend(internalFormat, shouldBlend) {
     const prog = wtu.setupProgram(gl, [trivialVsSrc, trivialFsSrc]);
     gl.useProgram(prog);
 
@@ -57,9 +99,7 @@ function testExtFloatBlend(internalFormat) {
     gl.deleteTexture(tex);
 }
 
-function testExtFloatBlendMRT() {
-    const shouldBlend = gl.getSupportedExtensions().indexOf('EXT_float_blend') != -1;
-
+function testExtFloatBlendMRT(shouldBlend) {
     const prog = wtu.setupProgram(gl, [trivialVsMrtSrc, trivialFsMrtSrc]);
     gl.useProgram(prog);
 
@@ -127,9 +167,7 @@ function testExtFloatBlendMRT() {
     gl.deleteTexture(texF2);
 }
 
-function testExtFloatBlendNonFloat32Type() {
-    const shouldBlend = gl.getSupportedExtensions().indexOf('EXT_float_blend') != -1;
-
+function testExtFloatBlendNonFloat32Type(shouldBlend) {
     const prog = wtu.setupProgram(gl, [trivialVsSrc, trivialFsSrc]);
     gl.useProgram(prog);
 
