@@ -34,7 +34,7 @@ function testExtFloatBlendFunctionality() {
     // as some devices don't advertise EXT_float_blend
     // but could actually do the work correctly.
     // we try not to break apps that used to work
-    
+
     var prog = wtu.setupColorQuad(gl);
     gl.useProgram(prog);
     var colorLocation = gl.getUniformLocation(prog, 'u_color');
@@ -46,6 +46,8 @@ function testExtFloatBlendFunctionality() {
     gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
     gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
 

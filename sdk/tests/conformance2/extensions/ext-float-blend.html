@@ -29,7 +29,7 @@ var ext = null;
 
     let shouldBlend = testExtFloatBlendFunctionality();
     debug( shouldBlend ?
-        "This device has float 32 blending functionality even if EXT_float_blend is not listed" :
+        "This device has float 32 blending capability" :
         "This device cannot do float 32 blending"
         );
     const hasExtFloatBlend = gl.getSupportedExtensions().indexOf('EXT_float_blend') != -1;
