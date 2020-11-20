@@ -1,0 +1,410 @@
+<!--
+Copyright (c) 2020 The Khronos Group Inc.
+Use of this source code is governed by an MIT-style license that can be
+found in the LICENSE.txt file.
+-->
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>WebGL EXT_texture_norm16 Conformance Tests</title>
+<LINK rel="stylesheet" href="../../resources/js-test-style.css"/>
+<script src="../../js/js-test-pre.js"></script>
+<script src="../../js/webgl-test-utils.js"></script>
+</head>
+<body>
+<!-- <canvas id="canvas" width="64" height="64"></canvas> -->
+<canvas id="canvas" width="1" height="1"></canvas>
+<div id="description"></div>
+<div id="console"></div>
+<script>
+"use strict";
+description("This test verifies the functionality of the EXT_texture_norm16 extension, if it is available.");
+
+debug("");
+
+var wtu = WebGLTestUtils;
+var gl = wtu.create3DContext(document.getElementById("canvas"), null, 2);
+var ext;
+
+var formats = null;
+var textures;
+var fbos;
+var renderbuffer;
+var readbackBuf = new Uint16Array(4);
+
+// img data src of different kinds
+var typedArrays = {};
+var imageBitmaps = {};
+var imageSrc = {};
+
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    let img = new Image();
+    img.addEventListener('load', e => resolve(img));
+    img.addEventListener('error', () => {
+      console.error(`Failed to load image's URL: ${url}`);
+      reject(new Error(`Failed to load image's URL: ${url}`));
+    });
+    img.src = url;
+  });
+}
+
+function prepareTypedArrays() {
+  let pixelValue;
+
+  pixelValue = 0x7fff;
+  typedArrays[gl.SHORT] = new Int16Array(4).fill(pixelValue);
+
+  pixelValue = 0x6a35;
+  typedArrays[gl.UNSIGNED_SHORT] = new Uint16Array(4).fill(pixelValue);
+}
+
+async function prepareImageSrc() {
+  await Promise.all([
+    // loadImage("../../../../resources/2x2-0x7fff-color-opaque.png").then((img) => {
+    loadImage("../../../../resources/1x1-0x7fff-s.png").then((img) => {
+      imageSrc[gl.SHORT] = img;
+    }),
+    // loadImage("../../../../resources/2x2-0x6a35-color-0x6a35-transparent.png").then((img) => {
+    loadImage("../../../../resources/1x1-0x6a35.png").then((img) => {
+      imageSrc[gl.UNSIGNED_SHORT] = img;
+
+      // //test
+      // let c = document.getElementById("canvas2");
+      // let ctx = c.getContext('2d');
+      // ctx.drawImage(img, 0, 0);
+    })
+    // loadImage("../../../../resources/255.png").then((img) => {
+    //   imageSrc[gl.SHORT] = img;
+    // }),
+    // loadImage("../../../../resources/106.png").then((img) => {
+    //   imageSrc[gl.UNSIGNED_SHORT] = img;
+    // })
+  ]);
+}
+
+async function prepareImageBitmaps() {
+  if(!window.createImageBitmap || !window.ImageBitmap) {
+    debug("ImageBitmap isn't supported");
+    return;
+  }
+
+  // // for gl.SHORT
+  // let pixelValue = 1;   // 0x7fff
+  // // let pixelValue = 0.2;   // 0x7fff
+  // // gl.clearColor(pixelValue, pixelValue, pixelValue, pixelValue);
+  // gl.clearColor(pixelValue, pixelValue, pixelValue, 1);
+  // gl.clear(gl.COLOR_BUFFER_BIT);
+  // await createImageBitmap(document.getElementById("canvas"), 0, 0, 1, 1).then((img) => {
+  //   console.log(img);
+  //   imageBitmaps[gl.SHORT] = img;
+  // });
+
+  // // for gl.UNSIGNED_SHORT
+  // pixelValue = 0x6a35 / 0xffff;
+  // // debug(pixelValue);
+  // // gl.clearColor(pixelValue, pixelValue, pixelValue, pixelValue);
+  // gl.clearColor(pixelValue, pixelValue, pixelValue, 1);
+  // // gl.clearColor(pixelValue, pixelValue, pixelValue, 0.43);
+  // // gl.clearColor(1, 0, 0, 0.4);
+  // gl.clear(gl.COLOR_BUFFER_BIT);
+  // await createImageBitmap(document.getElementById("canvas"), 0, 0, 1, 1).then((img) => {
+  //   console.log(img);
+  //   imageBitmaps[gl.UNSIGNED_SHORT] = img;
+
+  //   // let c = document.getElementById("canvas2");
+  //   // let ctx = c.getContext('2d');
+  //   // ctx.drawImage(img, 0, 0);
+  // });
+
+
+
+
+
+  await createImageBitmap(imageSrc[gl.SHORT], 0, 0, 1, 1).then((img) => {
+    // console.log(img);
+    imageBitmaps[gl.SHORT] = img;
+  });
+
+  // await createImageBitmap(imageSrc[gl.UNSIGNED_SHORT], 0, 0, 16, 16).then((img) => {
+  await createImageBitmap(imageSrc[gl.UNSIGNED_SHORT], 0, 0, 1, 1).then((img) => {
+    // console.log(img);
+    imageBitmaps[gl.UNSIGNED_SHORT] = img;
+
+    // let c = document.getElementById("canvas2");
+    // let ctx = c.getContext('2d');
+    // ctx.drawImage(img, 0, 0);
+  });
+
+  // gl.clearColor(0, 0, 0, 1);
+  // gl.clear(gl.COLOR_BUFFER_BIT);
+  
+
+  console.log("finish prepare ImageBitmaps");
+}
+
+// function prepareImageSrc() {
+//   imageSrc[gl.SHORT] = 
+// }
+
+function generateFormatColor(format, value, alpha) {
+  alpha = alpha !== undefined ? alpha : 255;
+  switch(format) {
+    case gl.RED:
+      return [value, 0, 0, alpha];
+    case gl.RG:
+      return [value, value, 0, alpha];
+    case gl.RGB:
+      return [value, value, value, alpha];
+    case gl.RGBA:
+      return [value, value, value, value];
+    default:
+      wtu.error("Unreachable: Unknown format.");
+      return null;
+  }
+}
+
+function texImageSrc(internalFormat, format, type) {
+  debug("texFunc: texImageSrc");
+  gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, 1, 1, 0, format, type, imageSrc[type]);
+}
+
+function texImageBitmap(internalFormat, format, type) {
+  // if(!window.createImageBitmap || !window.ImageBitmap) {
+  //   debug("ImageBitmap isn't supported");
+  //   return;
+  // }
+  debug("texFunc: texImageBitmap");
+  gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, 1, 1, 0, format, type, imageBitmaps[type]);
+}
+
+function texImageTypedArray(internalFormat, format, type) {
+  debug("texFunc: texImageTypedArray");
+  gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, 1, 1, 0, format, type, typedArrays[type]);
+}
+
+function testNorm16Texture(texImageFunc, internalFormat, format, type) {
+  let expectedValue;
+  switch (type) {
+    case gl.SHORT:
+      expectedValue = 0xffff;
+      break;
+    case gl.UNSIGNED_SHORT:
+      expectedValue = 0x6a35;
+      break;
+    default:
+      wtu.error("Unreachable: Unknown texture type.");
+      break;
+  }
+
+  // Render to fbo texture attachment test
+  gl.bindTexture(gl.TEXTURE_2D, textures[1]);
+  gl.texImage2D(gl.TEXTURE_2D, 0, ext.RGBA16_EXT, 1, 1, 0, gl.RGBA, gl.UNSIGNED_SHORT, null);
+
+  wtu.glErrorShouldBe(gl, gl.NO_ERROR, "rtt bindings succeed");
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[0]);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textures[1], 0);
+
+  wtu.glErrorShouldBe(gl, gl.NO_ERROR, "fbo bindings succeed");
+  ///////////////
+
+  // Texture sampled from
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, textures[0]);
+  texImageFunc(internalFormat, format, type);
+
+  wtu.glErrorShouldBe(gl, gl.NO_ERROR, "texture bindings succeed");
+
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+  // // Read back as gl.UNSIGNED_BYTE
+  // wtu.checkCanvasRect(gl, 0, 0, 1, 1, generateFormatColor(format, expectedValue));
+
+  // // test
+  // let v = new Uint16Array(4);
+  // gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_SHORT, v);
+  // debug(v);
+
+  let readbackBuf = new Uint16Array(4);
+
+  // let readbackBuf;
+  // switch (type) {
+  //   case gl.SHORT:
+  //     readbackBuf = new Int16Array(4);
+  //     break;
+  //   case gl.UNSIGNED_SHORT:
+  //     readbackBuf = new Uint16Array(4);
+  //     break;
+  //   default:
+  //     wtu.error("Unreachable: Unknown texture type.");
+  //     break;
+  // }
+
+  wtu.checkCanvasRect(gl, 0, 0, 1, 1, generateFormatColor(format, expectedValue, 0xffff), undefined, 0, readbackBuf, gl.UNSIGNED_SHORT);
+
+  // debug(readbackBuf);
+}
+
+function testSNorm16TextureImageDisallowed(texImageFunc, internalFormat, format, type) {
+  gl.bindTexture(gl.TEXTURE_2D, textures[0]);
+  texImageFunc(internalFormat, format, type);
+  wtu.glErrorShouldBe(gl, gl.INVALID_ENUM, "texture bindings succeed");
+}
+
+function testNorm16Render(texImageFunc, internalFormat, format, type, tolerance) {
+  // Only UNSIGNED_SHORT are renderable
+  assertMsg(type === gl.UNSIGNED_SHORT, "Only UNSIGNED_SHORT types are renderable");
+  let expectedValue = 0x6a35;
+
+  // Render to fbo texture attachment test
+  gl.bindTexture(gl.TEXTURE_2D, textures[1]);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, 1, 1, 0, format, type, null);
+
+  wtu.glErrorShouldBe(gl, gl.NO_ERROR, "rtt bindings succeed");
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[0]);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textures[1], 0);
+
+  wtu.glErrorShouldBe(gl, gl.NO_ERROR, "fbo bindings succeed");
+
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, textures[0]);
+  texImageFunc(internalFormat, format, type);
+
+  wtu.glErrorShouldBe(gl, gl.NO_ERROR, "texture bindings succeed");
+
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+  wtu.checkCanvasRect(gl, 0, 0, 1, 1, generateFormatColor(format, expectedValue, 0xffff), undefined, tolerance, readbackBuf, type);
+
+  // Renderbuffer test
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[1]);
+  gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
+  gl.renderbufferStorage(gl.RENDERBUFFER, internalFormat, 1, 1);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER,
+                            renderbuffer);
+  gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+
+  wtu.glErrorShouldBe(gl, gl.NO_ERROR, "renderbuffer bindings succeed");
+
+  gl.clearColor(1, 1, 1, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  wtu.checkCanvasRect(gl, 0, 0, 1, 1, generateFormatColor(format, 0xffff, 0xffff), undefined, tolerance, readbackBuf, type);
+
+  // Copy from renderbuffer to textures[1] test
+  gl.bindTexture(gl.TEXTURE_2D, textures[1]);
+  gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, 1, 1);
+
+  wtu.glErrorShouldBe(gl, gl.NO_ERROR, "copy succeed");
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[0]);
+  wtu.checkCanvasRect(gl, 0, 0, 1, 1, generateFormatColor(format, 0xffff, 0xffff), undefined, tolerance, readbackBuf, type);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+}
+
+function testSnorm16Unrenderable(internalFormat, format, type) {
+  gl.bindTexture(gl.TEXTURE_2D, textures[1]);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, 1, 1, 0, format, type, null);
+
+  wtu.glErrorShouldBe(gl, gl.NO_ERROR, "texture definition succeeded");
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[0]);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textures[1], 0);
+
+  wtu.glErrorShouldBe(gl, gl.NO_ERROR, "fbo binding succeeded");
+
+  wtu.framebufferStatusShouldBe(gl, gl.FRAMEBUFFER, [ gl.FRAMEBUFFER_INCOMPLETE_ATTACHMENT, gl.FRAMEBUFFER_UNSUPPORTED ],
+                                "framebuffer should not be complete with SNORM16 texture attached");
+}
+
+async function runTestExtension() {
+  prepareTypedArrays();
+  await prepareImageSrc();
+  // await prepareImageBitmaps();
+
+  textures = [gl.createTexture(), gl.createTexture()];
+  fbos = [gl.createFramebuffer(), gl.createFramebuffer()];
+  renderbuffer = gl.createRenderbuffer();
+
+  for (let i = 0; i < 2; i++) {
+    gl.bindTexture(gl.TEXTURE_2D, textures[i]);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  }
+
+  gl.bindTexture(gl.TEXTURE_2D, null);
+
+  wtu.glErrorShouldBe(gl, gl.NO_ERROR, "texture and framebuffer setup succeed");
+
+  let program300 = wtu.setupSimpleTextureProgramESSL300(gl);
+  let program100 = wtu.setupTexturedQuad(gl, 0, 1, wtu.simpleHighPrecisionTextureFragmentShader);
+
+  // let texImageFuncs = [texImageTypedArray];
+  // let texImageFuncs = [texImageBitmap];
+  let texImageFuncs = [texImageSrc];
+  // let texImageFuncs = [texImageTypedArray, texImageSrc];
+  // let texImageFuncs = [texImageTypedArray, texImageSrc, texImageBitmap];
+  for (let i = 0, len = texImageFuncs.length; i < len; i++) {
+    // testNorm16Texture(texImageFuncs[i], ext.R16_EXT, gl.RED, gl.UNSIGNED_SHORT);
+    // testNorm16Texture(texImageFuncs[i], ext.RG16_EXT, gl.RG, gl.UNSIGNED_SHORT);
+    // testNorm16Texture(texImageFuncs[i], ext.RGB16_EXT, gl.RGB, gl.UNSIGNED_SHORT);
+    testNorm16Texture(texImageFuncs[i], ext.RGBA16_EXT, gl.RGBA, gl.UNSIGNED_SHORT);
+    
+    // if (texImageFuncs[i] === texImageTypedArray) {
+    //   testNorm16Texture(texImageFuncs[i], ext.R16_SNORM_EXT, gl.RED, gl.SHORT);
+    //   testNorm16Texture(texImageFuncs[i], ext.RG16_SNORM_EXT, gl.RG, gl.SHORT);
+    //   testNorm16Texture(texImageFuncs[i], ext.RGB16_SNORM_EXT, gl.RGB, gl.SHORT);
+    //   testNorm16Texture(texImageFuncs[i], ext.RGBA16_SNORM_EXT, gl.RGBA, gl.SHORT);
+    // } else {
+    //   testSNorm16TextureImageDisallowed(texImageFuncs[i], ext.R16_SNORM_EXT, gl.RED, gl.SHORT);
+    //   testSNorm16TextureImageDisallowed(texImageFuncs[i], ext.RG16_SNORM_EXT, gl.RG, gl.SHORT);
+    //   testSNorm16TextureImageDisallowed(texImageFuncs[i], ext.RGB16_SNORM_EXT, gl.RGB, gl.SHORT);
+    //   testSNorm16TextureImageDisallowed(texImageFuncs[i], ext.RGBA16_SNORM_EXT, gl.RGBA, gl.SHORT);
+    // }
+  }
+
+  // gl.useProgram(program300);
+
+  // for (let i = 0, len = texImageFuncs.length; i < len; i++) {
+  //   testNorm16Render(texImageFuncs[i], ext.R16_EXT, gl.RED, gl.UNSIGNED_SHORT, 0);
+  //   testNorm16Render(texImageFuncs[i], ext.RG16_EXT, gl.RG, gl.UNSIGNED_SHORT, 0);
+  //   testNorm16Render(texImageFuncs[i], ext.RGBA16_EXT, gl.RGBA, gl.UNSIGNED_SHORT, 0);
+  // }
+
+  // testSnorm16Unrenderable(ext.R16_SNORM_EXT, gl.RED, gl.SHORT);
+  // testSnorm16Unrenderable(ext.RG16_SNORM_EXT, gl.RG, gl.SHORT);
+  // testSnorm16Unrenderable(ext.RGB16_SNORM_EXT, gl.RGB, gl.SHORT);
+  // testSnorm16Unrenderable(ext.RGBA16_SNORM_EXT, gl.RGBA, gl.SHORT);
+};
+
+async function runTest() {
+  if (!gl) {
+    testFailed("context does not exist");
+  } else {
+    testPassed("context exists");
+
+    ext = gl.getExtension("EXT_texture_norm16");
+
+    wtu.runExtensionSupportedTest(gl, "EXT_texture_norm16", ext !== null);
+
+    if (ext !== null) {
+      await runTestExtension();
+    } else {
+      testPassed("No EXT_texture_norm16 support -- this is legal");
+    }
+  }
+  finishTest();
+}
+
+runTest();
+
+var successfullyParsed = true;
+</script>
+</body>
+</html>
